@@ -1,0 +1,4 @@
+[submodule "companion-risk-factors"]
+	path = companion-risk-factors
+	url = https://github.com/mkamstra/companion-risk-factors.git
+	branch = master
