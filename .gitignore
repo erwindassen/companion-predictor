@@ -61,3 +61,5 @@ target/
 #Ipython Notebook
 .ipynb_checkpoints
 pimsys_data
+hdf_data
+dfs_data
