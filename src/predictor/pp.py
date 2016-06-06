@@ -1,4 +1,5 @@
 import h5py
+# import tables
 import pandas as pd
 import pathlib2 as pl
 import logging
@@ -34,7 +35,7 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
     else:
         files = [pl.Path(input) / pl.Path(f) for f in files]
 
-    logger.info('%i files to process...' % len(files))
+    logger.info('%i file(s) to process...' % len(files))
 
     try:
         for filepath in files:
@@ -57,7 +58,7 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
                             .drop(['timestamp_end'], axis=1)\
                             .dropna(axis=0, how='all')  # Drops the empty rows included for completeness in the HDF
 
-                        # Merge df into odf
+                        # Merge df into sdf
                         sdf = pd.merge(sdf, df, on='timestamp_start', how='outer')
 
                 # Add site name as column
@@ -104,9 +105,15 @@ def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None):
 
     for df in generator:
         # Write out
+
         filepath = output / pl.Path(df.__name__)
-        df.to_hdf(str(filepath), key='dataset', format='table')
-        with h5py.File(str(filepath), 'r+') as f:
+        store = pd.HDFStore(str(filepath), mode='a')
+
+        store.open()
+        df.to_hdf(store, key='dataset', format='table', mode='a')
+        store.close()
+
+        with h5py.File(str(filepath), 'a') as f:
             name = filepath.stem
             start = name.split('_')[-2]
             end = name.split('_')[-1]
@@ -114,6 +121,7 @@ def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None):
             f.attrs['name'] = name
             f.attrs['datetime_start'] = start
             f.attrs['datetime_end'] = end
+
 
 
 if __name__ == '__main__':
