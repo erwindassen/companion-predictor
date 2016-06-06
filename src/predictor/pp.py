@@ -30,7 +30,7 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
     """
 
     if files is None:
-        files = input.glob('*.hdf')
+        files = list(input.glob('*.hdf'))
     else:
         files = [pl.Path(input) / pl.Path(f) for f in files]
 
@@ -105,7 +105,7 @@ def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None):
     for df in generator:
         # Write out
         filepath = output / pl.Path(df.__name__)
-        df.to_hdf(str(filepath), key='dataset')
+        df.to_hdf(str(filepath), key='dataset', format='table')
         with h5py.File(str(filepath), 'r+') as f:
             name = filepath.stem
             start = name.split('_')[-2]
@@ -146,7 +146,7 @@ if __name__ == '__main__':
     logger.info('and writing to %s...' % str(opts['--output']))
     handler.flush()
 
-    preprocess(input=opts['--input'], output=opts['--output'], files=files)
+    preprocess(input=pl.Path(opts['--input']), output=pl.Path(opts['--output']), files=files)
 
     logger.info('...done!')
     logging.shutdown()
