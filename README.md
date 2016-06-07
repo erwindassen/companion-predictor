@@ -17,12 +17,34 @@ Finally these chunks are fed to the TFLearn library for learning from the data.
 
 
 # Install
-Python 3 is required to run the software. The repository contains a requirements.txt file containing all the packages required to
-run the predictor software. Typically this requirements file can be used to install from Anaconda (http://www.continuum.io ). After
-installing Anaconda (Python 3+) use the following command to install the packages:
-conda create -n environment_name --file requirements.txt
+Python 3 is required to run the software. The repository contains a requirements.txt file and a pip_requirements.txt containing all 
+the packages required to run the predictor software. The requirements.txt can be used to create a Anaconda environment with (most of)
+the required packages installing automatically. If not already installed on your system, install Anaconda first 
+(http://www.continuum.io ). After Anaconda installation the following command should be used for creating the environment:
 
+conda create -n environment_name --file requirements.txt
  
+Some of the packages in conda are installed not from the defaults. They need to be installed manually after the conda environment has
+been created and activated:
+
+conda install -c https://conda.anaconda.org/jjhelmus tensorflow
+
+This will install protobuf as well. The predictor software has been tested with tensorflow 0.8.0 and protobuf 3.0.0b2
+
+Not all of the packages can be installed using conda, which is why there is a pip_requirements.txt file as well. Activate the conda
+environment using source activate environment_name (if it hasn't been activated already when creating the conda environment), and 
+install using the following command:
+
+pip install -r pip_requirements.txt
+
+Most of the package will have been installed using conda already. For now it is only deco that gets installed from this command.
+
+TFLearn needs to be installed manually using:
+
+pip install git+https://github.com/tflearn/tflearn.git
+
+This will install TFLearn 0.2.0
+
  
 # Background and Explanation
 The NDW has currently (dd 2016-06-06) more than 27.000 measurement sites all over the Netherlands, with a focus on the highways
