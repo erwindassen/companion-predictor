@@ -1,10 +1,11 @@
 import h5py
-# import tables
 import pandas as pd
 import pathlib2 as pl
 import logging
 import sys
 from docopt import docopt
+from deco import synchronized, concurrent
+
 
 pd.set_option('display.max_colwidth', 100)
 pd.set_option('display.max_rows', 200)
@@ -68,6 +69,11 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
             # Close the file
             f.close()
 
+            # If we end up with an empty dataframe skip
+            if fdf.index.size == 0:
+                logger.info('Empty DataFrame found... skipping.')
+                continue
+
             # Categorize the sites
             fdf['site'] = fdf['site'].astype('category')
 
@@ -88,10 +94,14 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
 
             # Yield the current DataFrame
             yield fdf
+
+        return
+
     except TypeError:
         logger.error('Input file list not iterable... skipping.')
 
 
+# @synchronized
 def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None):
     """
     Preprocess HDFs from the companion-risk-factors into a pandas DataFrame usable by the predictor.
