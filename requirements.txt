@@ -1,0 +1,60 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: linux-64
+anaconda-client=1.4.0=py35_0
+bokeh=0.11.1=py35_0
+chest=0.2.3=py35_0
+cloudpickle=0.2.1=py35_0
+clyent=1.2.2=py35_0
+cycler=0.10.0=py35_0
+dask=0.9.0=py35_0
+docopt=0.6.2=py35_0
+fontconfig=2.11.1=5
+freetype=2.5.5=1
+h5py=2.6.0=np110py35_1
+hdf5=1.8.16=0
+heapdict=1.0.0=py35_1
+jbig=2.1=0
+jinja2=2.8=py35_1
+jpeg=8d=0
+libgfortran=3.0.0=1
+libpng=1.6.17=0
+libtiff=4.0.6=1
+libxml2=2.9.2=0
+locket=0.2.0=py35_1
+markupsafe=0.23=py35_2
+matplotlib=1.5.1=np110py35_0
+mkl=11.3.3=0
+numexpr=2.5.2=np110py35_1
+numpy=1.10.4=py35_2
+openssl=1.0.2h=1
+pandas=0.18.1=np110py35_0
+partd=0.3.3=py35_0
+pathlib2=2.1.0=py35_0
+pillow=3.2.0=py35_0
+pip=8.1.2=py35_0
+# protobuf=3.0.0b2=py35_1
+pyparsing=2.1.4=py35_0
+pyqt=4.11.4=py35_2
+pytables=3.2.2=np110py35_3
+python=3.5.1=0
+python-dateutil=2.5.3=py35_0
+pytz=2016.4=py35_0
+pyyaml=3.11=py35_4
+qt=4.8.7=2
+readline=6.2=2
+requests=2.10.0=py35_0
+scipy=0.17.1=np110py35_0
+setuptools=22.0.5=py35_0
+sip=4.16.9=py35_0
+six=1.10.0=py35_0
+sqlite=3.13.0=0
+# tensorflow=0.8.0=py35_0
+theano=0.7.0=np110py35_0
+tk=8.5.18=0
+toolz=0.8.0=py35_0
+tornado=4.3=py35_1
+wheel=0.29.0=py35_0
+xz=5.0.5=1
+yaml=0.1.6=0
+zlib=1.2.8=3
