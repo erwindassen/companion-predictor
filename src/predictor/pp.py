@@ -96,10 +96,10 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
             fdf = fdf.reset_index()
             fdf['site_hash'] = fdf['site'].apply(hash)  # The standard python hash of object... very fast...
 
-            index = df[['site', 'datetime_start', 'site_hash']]
+            index = fdf[['site', 'datetime_start', 'site_hash']]
             index.__name__ = fdf.__name__
 
-            features = df[['site_hash', 'timestamp_start', 'precipitation mm/h', 'temperature C', 'windspeed m/s']]\
+            features = fdf[['site_hash', 'timestamp_start', 'precipitation mm/h', 'temperature C', 'windspeed m/s']]\
                 .as_matrix()
             features.__doc__ = \
             '''
@@ -108,7 +108,7 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
             site_hash (int), timestamp_start (int), precipitation (mm/h, float), temperature (C, float), windspeed (m/s, float)
             '''
 
-            target_flow = df[['trafficflow counts/h']].as_matrix()
+            target_flow = fdf[['trafficflow counts/h']].as_matrix()
             target_flow.__doc__ = \
             '''
             Contains, in order:
@@ -116,7 +116,7 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
             traffic_flow (counts/min, float)
             '''
 
-            target_speed = df[['trafficspeed km/h']].as_matrix()
+            target_speed = fdf[['trafficspeed km/h']].as_matrix()
             target_speed.__doc__ = \
             '''
             Contains, in order:
