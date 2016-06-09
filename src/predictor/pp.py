@@ -26,9 +26,10 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
     """
     Creates a generator that return each preprocessed file as a DataFrame one at a time.
 
-    :param input: Input path where HDFs are found
+    :param input: Input path where HDFs are found.
     :param files: Iterable object with list of file names to process in the given input path.
-    :return: A DataFrame generator
+    :return: A dataset generator (each is a tuple (index, features, target_flow, target_speed)
+    where all but the first is a numpy array and index is a pandas dataframe).
     """
 
     if files is None:
@@ -92,8 +93,39 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
             # Attach the filepath name to the dataframe as __name__
             fdf.__name__ = 'PP_' + filepath.name
 
+            fdf = fdf.reset_index()
+            fdf['site_hash'] = fdf['site'].apply(hash)  # The standard python hash of object... very fast...
+
+            index = df[['site', 'datetime_start', 'site_hash']]
+            index.__name__ = fdf.__name__
+
+            features = df[['site_hash', 'timestamp_start', 'precipitation mm/h', 'temperature C', 'windspeed m/s']]\
+                .as_matrix()
+            features.__doc__ = \
+            '''
+            Contains, in order:
+
+            site_hash (int), timestamp_start (int), precipitation (mm/h, float), temperature (C, float), windspeed (m/s, float)
+            '''
+
+            target_flow = df[['trafficflow counts/h']].as_matrix()
+            target_flow.__doc__ = \
+            '''
+            Contains, in order:
+
+            traffic_flow (counts/min, float)
+            '''
+
+            target_speed = df[['trafficspeed km/h']].as_matrix()
+            target_speed.__doc__ = \
+            '''
+            Contains, in order:
+
+            traffic_speed (km/h, float)
+            '''
+
             # Yield the current DataFrame
-            yield fdf
+            yield (index, features, target_flow, target_speed)
 
         return
 
@@ -113,25 +145,32 @@ def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None):
 
     generator = preprocessing_generator(input=input, files=files)
 
-    for df in generator:
+    for index, features, target_flow, target_speed in generator:
         # Write out
 
-        filepath = output / pl.Path(df.__name__)
+        filepath = output / pl.Path(index.__name__)
         store = pd.HDFStore(str(filepath), mode='a')
 
         store.open()
-        df.to_hdf(store, key='dataset', format='table', mode='a')
+        index.to_hdf(store, key='index', mode='a')
         store.close()
 
-        with h5py.File(str(filepath), 'a') as f:
+        with h5py.File(str(filepath), 'a') as store:
+            store.create_dataset('features_weather', data=features)
+            store.create_dataset('target_flow', data=target_flow)
+            store.create_dataset('target_speed', data=target_speed)
+
+            store['/features_weather'].attrs['doc'] = features.__doc__
+            store['/target_flow'].attrs['doc'] = target_flow.__doc__
+            store['/target_speed'].attrs['doc'] = target_speed.__doc__
+
             name = filepath.stem
             start = name.split('_')[-2]
             end = name.split('_')[-1]
 
-            f.attrs['name'] = name
-            f.attrs['datetime_start'] = start
-            f.attrs['datetime_end'] = end
-
+            store.attrs['name'] = name
+            store.attrs['datetime_start'] = start
+            store.attrs['datetime_end'] = end
 
 
 if __name__ == '__main__':
