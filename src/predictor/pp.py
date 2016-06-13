@@ -22,12 +22,13 @@ logging.basicConfig(handlers=(handler,), format='%(levelname)s %(asctime)s: %(me
 logger = logging.getLogger(__name__)
 
 
-def preprocessing_generator(input=_INPUT_PATH, files=None):
+def preprocessing_generator(input=_INPUT_PATH, files=None, mode='pandas'):
     """
     Creates a generator that return each preprocessed file as a DataFrame one at a time.
 
     :param input: Input path where HDFs are found.
     :param files: Iterable object with list of file names to process in the given input path.
+    :param mode: Determines the output format: either 'pandas' (DataFrame) or 'numpy' (array).
     :return: A dataset generator (each is a tuple (index, features, target_flow, target_speed)
     where all but the first is a numpy array and index is a pandas dataframe).
     """
@@ -75,8 +76,11 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
                 logger.info('Empty DataFrame found... skipping.')
                 continue
 
-            # Categorize the sites
-            fdf['site'] = fdf['site'].astype('category')
+            # Hash the site column for efficiency in ML down the pipe
+            fdf['site_hash'] = fdf['site'].apply(hash)  # The standard python hash of object... very fast...
+
+            # # Categorize the sites
+            # fdf['site'] = fdf['site'].astype('category')
 
             # Convert timestamp to int as it should be
             fdf['timestamp_start'] = fdf['timestamp_start'].astype('int64')
@@ -90,42 +94,47 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
             # Fill NA values: first propagate forward then backwards for the initial NA values
             fdf = fdf.fillna(method='ffill').fillna(method='bfill')
 
-            # Attach the filepath name to the dataframe as __name__
-            fdf.__name__ = 'PP_' + filepath.name
+            # Set filename as metadata
+            name = 'PP_' + filepath.name
+            fdf.__name__ = name
 
-            fdf = fdf.reset_index()
-            fdf['site_hash'] = fdf['site'].apply(hash)  # The standard python hash of object... very fast...
+            if mode == 'numpy':
+                fdf = fdf.reset_index()
 
-            index = fdf[['site', 'datetime_start', 'site_hash']]
-            index.__name__ = fdf.__name__
+                index = fdf[['site', 'datetime_start', 'site_hash']]
 
-            features = fdf[['site_hash', 'timestamp_start', 'precipitation mm/h', 'temperature C', 'windspeed m/s']]\
-                .as_matrix()
-            features.__doc__ = \
-            '''
-            Contains, in order:
+                features = fdf[['site_hash', 'timestamp_start', 'precipitation mm/h', 'temperature C', 'windspeed m/s']]\
+                    .as_matrix()
+                features_desc = \
+                '''
+                site_hash (int), timestamp_start (int), precipitation (mm/h, float), temperature (C, float), windspeed (m/s, float)
+                '''
 
-            site_hash (int), timestamp_start (int), precipitation (mm/h, float), temperature (C, float), windspeed (m/s, float)
-            '''
+                target_flow = fdf[['trafficflow counts/h']].as_matrix()
+                target_flow_desc = \
+                '''
+                traffic_flow (counts/min, float)
+                '''
 
-            target_flow = fdf[['trafficflow counts/h']].as_matrix()
-            target_flow.__doc__ = \
-            '''
-            Contains, in order:
+                target_speed = fdf[['trafficspeed km/h']].as_matrix()
+                target_speed_desc = \
+                '''
+                traffic_speed (km/h, float)
+                '''
 
-            traffic_flow (counts/min, float)
-            '''
+                description = {'name': name,
+                               'features': features_desc,
+                               'target_flow': target_flow_desc,
+                               'target_speed': target_speed_desc}
 
-            target_speed = fdf[['trafficspeed km/h']].as_matrix()
-            target_speed.__doc__ = \
-            '''
-            Contains, in order:
+                # Yield the current data set
+                yield (index, features, target_flow, target_speed, description)
 
-            traffic_speed (km/h, float)
-            '''
+            elif mode == 'pandas':
+                yield fdf
 
-            # Yield the current DataFrame
-            yield (index, features, target_flow, target_speed)
+            else:
+                raise ValueError('Expexted "pandas" or "numpy"')
 
         return
 
@@ -134,51 +143,68 @@ def preprocessing_generator(input=_INPUT_PATH, files=None):
 
 
 # @synchronized
-def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None):
+def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None, mode='pandas'):
     """
     Preprocess HDFs from the companion-risk-factors into a pandas DataFrame usable by the predictor.
 
     :param input: Input path where HDFs are found
     :param output: Output path were to store DataFrames, or the str "iter" in which case it returns an iterator over the input files.
     :param files: Iterable object with list of file names to process in the given input path.
+    :param mode: Determines the output format: either 'pandas' (DataFrame) or 'numpy' (array).
     """
 
-    generator = preprocessing_generator(input=input, files=files)
+    generator = preprocessing_generator(input=input, files=files, mode=mode)
 
-    for index, features, target_flow, target_speed in generator:
-        # Write out
+    for ds in generator:
+        if mode == 'pandas':
+            name = ds.__name__
+            filepath = output / pl.Path(name)
+            store = pd.HDFStore(str(filepath), mode='a')
 
-        filepath = output / pl.Path(index.__name__)
-        store = pd.HDFStore(str(filepath), mode='a')
+            # Write out
+            store.open()
+            ds.to_hdf(store, key='index', format='table', mode='a')
+            store.close()
 
-        store.open()
-        index.to_hdf(store, key='index', mode='a')
-        store.close()
+        elif mode == 'numpy':
+            index, features, target_flow, target_speed, description = ds  # Unpack
 
-        with h5py.File(str(filepath), 'a') as store:
-            store.create_dataset('features_weather', data=features)
-            store.create_dataset('target_flow', data=target_flow)
-            store.create_dataset('target_speed', data=target_speed)
+            # Write out
+            name = description['name']
+            filepath = output / pl.Path(name)
+            store = pd.HDFStore(str(filepath), mode='a')
 
-            store['/features_weather'].attrs['doc'] = features.__doc__
-            store['/target_flow'].attrs['doc'] = target_flow.__doc__
-            store['/target_speed'].attrs['doc'] = target_speed.__doc__
+            store.open()
+            index.to_hdf(store, key='index', format='table', mode='a')
+            store.close()
 
-            name = filepath.stem
-            start = name.split('_')[-2]
-            end = name.split('_')[-1]
+            with h5py.File(str(filepath), 'a') as store:
+                store.create_dataset('features_weather', data=features)
+                store.create_dataset('target_flow', data=target_flow)
+                store.create_dataset('target_speed', data=target_speed)
 
-            store.attrs['name'] = name
-            store.attrs['datetime_start'] = start
-            store.attrs['datetime_end'] = end
+                store['/features_weather'].attrs['columns'] = description['features']
+                store['/target_flow'].attrs['columns'] = description['target_flow']
+                store['/target_speed'].attrs['columns'] = description['target_speed']
+
+                start = name.split('_')[-2]
+                end = name.split('_')[-1]
+
+                store.attrs['name'] = name
+                store.attrs['datetime_start'] = start
+                store.attrs['datetime_end'] = end
+
+        else:
+            raise ValueError('Expected "pandas" or "numpy"')
 
 
 if __name__ == '__main__':
 
     __doc__ = \
-    """Usage: pp.py [--quiet] [--input <input_path>] [--output <output_path>] [--files <file_list>]
+    """Usage: pp.py  [--numpy] [--quiet] [--input <input_path>] [--output <output_path>] [--files <file_list>]
 
     -h, --help   show this
+    -n, --numpy  exports output into numpy arrays instead of pandas DataFrames
     -q, --quiet  suppress info output, errors will be shown
     -i <input_path>, --input <input_path>  input path with HDFs [default: ./hdf_data]
     -o <output_path>, --output <output_path>  output path for DataFrames [default: ./dfs_data]
@@ -187,6 +213,12 @@ if __name__ == '__main__':
     """
 
     opts = docopt(__doc__)
+
+    if opts['--numpy']:
+        mode = 'numpy'
+    else:
+        mode = 'pandas'
+
     if opts['--quiet']:
         logger.setLevel(logging.ERROR)
     else:
@@ -203,7 +235,7 @@ if __name__ == '__main__':
     logger.info('and writing to %s...' % str(opts['--output']))
     handler.flush()
 
-    preprocess(input=pl.Path(opts['--input']), output=pl.Path(opts['--output']), files=files)
+    preprocess(input=pl.Path(opts['--input']), output=pl.Path(opts['--output']), files=files, mode=mode)
 
     logger.info('...done!')
     logging.shutdown()
