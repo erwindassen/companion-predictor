@@ -3,6 +3,8 @@ import pandas as pd
 import pathlib2 as pl
 import logging
 import sys
+import mmh3
+
 from docopt import docopt
 from deco import synchronized, concurrent
 
@@ -77,7 +79,8 @@ def preprocessing_generator(input=_INPUT_PATH, files=None, mode='pandas'):
                 continue
 
             # Hash the site column for efficiency in ML down the pipe
-            fdf['site_hash'] = fdf['site'].apply(hash)  # The standard python hash of object... very fast...
+            # fdf['site_hash'] = fdf['site'].apply(hash)  # The standard python hash of object... very fast... but not consistent among sessions
+            fdf['site_hash'] = fdf['site'].apply(lambda s: mmh3.hash64(s)[-1])  # Murmur hash v3. Should be consistent and fast.
 
             # # Categorize the sites
             # fdf['site'] = fdf['site'].astype('category')
@@ -163,8 +166,17 @@ def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None, mode='pandas'
 
             # Write out
             store.open()
-            ds.to_hdf(store, key='index', format='table', mode='a')
+            ds.to_hdf(store, key='dataset', format='table', mode='a')
             store.close()
+
+            with h5py.File(str(filepath), 'a') as store:
+                start = name.split('_')[-2]
+                end = name.split('_')[-1]
+
+                store.attrs['name'] = name
+                store.attrs['datetime_start'] = start
+                store.attrs['datetime_end'] = end
+
 
         elif mode == 'numpy':
             index, features, target_flow, target_speed, description = ds  # Unpack

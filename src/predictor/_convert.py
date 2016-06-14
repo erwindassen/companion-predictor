@@ -7,7 +7,7 @@ Just edit the OUTPUT_PATH variable to point to where the DataFrames are.
 import pandas as pd
 import pathlib2 as pl
 import h5py
-from hashlib import md5
+import mmh3
 
 OUTPUT_PATH = pl.Path("/Volumes/CompanionEx/Data/dfs/")
 # OUTPUT_PATH = pl.Path("./dfs_data/")
@@ -20,7 +20,7 @@ for filepath in files:
     filepath.unlink()
 
     df = df.reset_index()
-    df['site_hash'] = df['site'].apply(hash)  # The standard python hash of object... very fast...
+    df['site_hash'] = df['site'].apply(lambda s: mmh3.hash64(s)[-1])  # A consistent hash function... very fast...
     np_features = df[['site_hash', 'timestamp_start', 'precipitation mm/h', 'temperature C', 'windspeed m/s']].as_matrix()
     np_target_flow = df[['trafficflow counts/h']].as_matrix()
     np_target_speed = df[['trafficspeed km/h']].as_matrix()

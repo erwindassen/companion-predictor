@@ -9,5 +9,6 @@ numpy=1.10.4=py35_2
 openssl=1.0.2h=1
 pandas=0.18.1=np110py35_0
 pathlib2=2.1.0=py35_0
+murmurhash3=2.3.5=py35_0
 # tensorflow=0.8.0=py35_0
 # tflearn=0.2.0=py35_0
