@@ -7,29 +7,42 @@ Just edit the OUTPUT_PATH variable to point to where the DataFrames are.
 import pandas as pd
 import pathlib2 as pl
 import h5py
+import mmh3
 
-# OUTPUT_PATH = pl.Path("/Volumes/CompanionEx/Data/dfs/")
-OUTPUT_PATH = pl.Path("./dfs_data/")
+OUTPUT_PATH = pl.Path("/Volumes/CompanionEx/Data/dfs/")
+# OUTPUT_PATH = pl.Path("./dfs_data/")
 
 files = list(OUTPUT_PATH.glob('*.hdf'))
 
 for filepath in files:
-    filepath = OUTPUT_PATH / pl.Path(filepath)
     print(str(filepath))
     df = pd.read_hdf(str(filepath), key='dataset')
     filepath.unlink()
 
+    df = df.reset_index()
+    df['site_hash'] = df['site'].apply(lambda s: mmh3.hash64(s)[-1])  # A consistent hash function... very fast...
+    np_features = df[['site_hash', 'timestamp_start', 'precipitation mm/h', 'temperature C', 'windspeed m/s']].as_matrix()
+    np_target_flow = df[['trafficflow counts/h']].as_matrix()
+    np_target_speed = df[['trafficspeed km/h']].as_matrix()
+
     store = pd.HDFStore(str(filepath), mode='a')
     store.open()
-    df.to_hdf(store, key='dataset', format='table', mode='a')
+    df[['site', 'datetime_start', 'site_hash']].to_hdf(store, key='index', mode='a')
     store.close()
 
-    with h5py.File(str(filepath), 'a') as f:
+    with h5py.File(str(filepath), 'a') as store:
+        store.create_dataset('features_weather', data=np_features)
+        store.create_dataset('target_flow', data=np_target_flow)
+        store.create_dataset('target_speed', data=np_target_speed)
+
+        store['/features_weather'].attrs['units'] = '(mm/h, C, m/s)'
+        store['/target_flow'].attrs['units'] = '(counts/m)'
+        store['/target_speed'].attrs['units'] = '(km/h)'
+
         name = filepath.stem
         start = name.split('_')[2]
         end = name.split('_')[3]
 
-        f.attrs['name'] = name
-        f.attrs['datetime_start'] = start
-        f.attrs['datetime_end'] = end
-
+        store.attrs['name'] = name
+        store.attrs['datetime_start'] = start
+        store.attrs['datetime_end'] = end
