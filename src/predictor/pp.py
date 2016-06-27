@@ -2,7 +2,7 @@ import h5py
 import pandas as pd
 import pathlib2 as pl
 import logging
-import sys
+from sys import stdout
 import mmh3
 
 from docopt import docopt
@@ -19,7 +19,7 @@ _INPUT_PATH = pl.Path("./hdf_data/")
 _OUTPUT_PATH = pl.Path("./dfs_data/")
 
 # Configure logging
-handler = logging.StreamHandler(stream=sys.stdout)
+handler = logging.StreamHandler(stream=stdout)
 logging.basicConfig(handlers=(handler,), format='%(levelname)s %(asctime)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S')
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def preprocessing_generator(input=_INPUT_PATH, files=None, mode='pandas'):
     try:
         for filepath in files:
             logger.info('Processing %s' % str(filepath.name))
-            sys.stdout.flush()
+            stdout.flush()
 
             fdf = pd.DataFrame(data=[],columns=['timestamp_start'])
             f = h5py.File(str(filepath), 'r')
