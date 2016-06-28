@@ -7,6 +7,7 @@ import mmh3
 
 from docopt import docopt
 from deco import synchronized, concurrent
+from multiprocessing import cpu_count
 
 
 pd.set_option('display.max_colwidth', 100)
@@ -17,6 +18,8 @@ pd.set_option('display.width', 1000)
 _INPUT_PATH = pl.Path("./hdf_data/")
 # _INPUT_PATH = pl.Path("/Volumes/CompanionEx/Data/hdf/")
 _OUTPUT_PATH = pl.Path("./dfs_data/")
+
+_PROCESSES = max(1, cpu_count() - 1)
 
 # Configure logging
 handler = logging.StreamHandler(stream=stdout)
@@ -40,7 +43,8 @@ def preprocessing_generator(input=_INPUT_PATH, files=None, mode='pandas'):
     else:
         files = [pl.Path(input) / pl.Path(f) for f in files]
 
-    logger.info('%i file(s) to process...' % len(files))
+    if len(files) > 1:
+        logger.info('%i file(s) to process...' % len(files))
 
     try:
         for filepath in files:
@@ -144,19 +148,10 @@ def preprocessing_generator(input=_INPUT_PATH, files=None, mode='pandas'):
     except TypeError:
         logger.error('Input file list not iterable... skipping.')
 
-
-# @synchronized
-def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None, mode='pandas'):
-    """
-    Preprocess HDFs from the companion-risk-factors into a pandas DataFrame usable by the predictor.
-
-    :param input: Input path where HDFs are found
-    :param output: Output path were to store DataFrames, or the str "iter" in which case it returns an iterator over the input files.
-    :param files: Iterable object with list of file names to process in the given input path.
-    :param mode: Determines the output format: either 'pandas' (DataFrame) or 'numpy' (array).
-    """
-
-    generator = preprocessing_generator(input=input, files=files, mode=mode)
+# Define an inner function to be passed to the pool
+@concurrent(processes=_PROCESSES)
+def preprocess_file(input=_INPUT_PATH, output=_OUTPUT_PATH, file=None, mode='pandas'):
+    generator = preprocessing_generator(input=input, files=[file], mode=mode)
 
     for ds in generator:
         if mode == 'pandas':
@@ -209,11 +204,29 @@ def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None, mode='pandas'
         else:
             raise ValueError('Expected "pandas" or "numpy"')
 
+@synchronized
+def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None, mode='pandas'):
+    """
+    Preprocess HDFs from the companion-risk-factors into a pandas DataFrame usable by the predictor.
+
+    :param input: Input path where HDFs are found
+    :param output: Output path were to store DataFrames, or the str "iter" in which case it returns an iterator over the input files.
+    :param files: Iterable object with list of file names to process in the given input path.
+    :param mode: Determines the output format: either 'pandas' (DataFrame) or 'numpy' (array).
+    """
+
+    if files is None:
+        files = list(input.glob('*.hdf'))
+    else:
+        files = [pl.Path(input) / pl.Path(f) for f in files]
+
+    for file in files:
+        preprocess_file(input=input, output=output, file=file, mode=mode)
 
 if __name__ == '__main__':
 
     __doc__ = \
-    """Usage: pp.py  [--numpy] [--quiet] [--input <input_path>] [--output <output_path>] [--files <file_list>]
+    """Usage: pp.py  [--numpy] [--quiet] [--input <input_path>] [--output <output_path>] [--files <file_list>] [--processes <num_processes>]
 
     -h, --help   show this
     -n, --numpy  exports output into numpy arrays instead of pandas DataFrames
@@ -245,9 +258,15 @@ if __name__ == '__main__':
 
     logger.info('Looking for files in %s...' % str(opts['--input']))
     logger.info('and writing to %s...' % str(opts['--output']))
+
+    if len(files) > 1:
+        logger.info('%i file(s) to process...' % len(files))
+
+    logger.info('Using %i processes.' % _PROCESSES)
     handler.flush()
 
-    preprocess(input=pl.Path(opts['--input']), output=pl.Path(opts['--output']), files=files, mode=mode)
+    preprocess(input=pl.Path(opts['--input']), output=pl.Path(opts['--output']),
+               files=files, mode=mode)
 
     logger.info('...done!')
     logging.shutdown()
