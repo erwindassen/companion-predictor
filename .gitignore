@@ -63,3 +63,5 @@ target/
 pimsys_data
 hdf_data
 dfs_data
+file_list.txt
+tf_logs
