@@ -1,0 +1,4 @@
+[global]
+init_gpu_device =
+openmp = True
+openmp_elemwise_minsize = 200000
