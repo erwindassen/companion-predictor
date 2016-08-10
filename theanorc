@@ -1,5 +1,5 @@
 [global]
 device = gpu0
-flaotX = float64
+flaotX = float32
 openmp = True
 openmp_elemwise_minsize = 200000
