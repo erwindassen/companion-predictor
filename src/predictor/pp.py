@@ -7,6 +7,7 @@ import mmh3
 
 from docopt import docopt
 from deco import synchronized, concurrent
+
 from multiprocessing import cpu_count
 
 
@@ -28,7 +29,8 @@ logging.basicConfig(handlers=(handler,), format='%(levelname)s %(asctime)s: %(me
 logger = logging.getLogger(__name__)
 
 
-def preprocessing_generator(file, input=_INPUT_PATH, mode='pandas'):
+@concurrent(processes=_PROCESSES)
+def preprocess_file(file, input=_INPUT_PATH, mode='pandas'):
     """
     Creates a generator that return each preprocessed file as a DataFrame one at a time.
 
@@ -43,7 +45,7 @@ def preprocessing_generator(file, input=_INPUT_PATH, mode='pandas'):
     filepath = input / file
 
     try:
-        logger.info('Processing %s' % str(file.name))
+        logger.info('Preprocessing %s' % str(file.name))
         stdout.flush()
 
         fdf = pd.DataFrame(data=[],columns=['timestamp_start'])
@@ -94,7 +96,8 @@ def preprocessing_generator(file, input=_INPUT_PATH, mode='pandas'):
         # Use timestamp and aggregate to day
         datetime_index = pd.DatetimeIndex(fdf['datetime_start'])
         fdf['day'] = datetime_index.to_period(freq='d')
-        day_counts = fdf['day'].apply(str).value_counts()
+        fdf['day'] = fdf['day'].apply(str)
+        day_counts = fdf['day'].value_counts()
 
         # Set index to (site, datetime_start) and sort before filling NA
         fdf = fdf.set_index(['site', 'datetime_start']).sort_index()
@@ -107,7 +110,6 @@ def preprocessing_generator(file, input=_INPUT_PATH, mode='pandas'):
 
         # Set filename as metadata
         name = 'PP_' + file.name
-        fdf.__name__ = name
 
         if mode == 'numpy':
             fdf = fdf.reset_index()
@@ -141,10 +143,10 @@ def preprocessing_generator(file, input=_INPUT_PATH, mode='pandas'):
                         'site_counts': site_counts}
 
             # Yield the current data set
-            yield (index, features, target_flow, target_speed, metadata)
+            return index, features, target_flow, target_speed, metadata
 
         elif mode == 'pandas':
-            return fdf, day_counts, site_counts
+            return name, fdf, day_counts, site_counts
 
         else:
             raise ValueError('Expected "pandas" or "numpy"')
@@ -154,67 +156,64 @@ def preprocessing_generator(file, input=_INPUT_PATH, mode='pandas'):
     except TypeError:
         logger.error('Input file list not iterable... skipping.')
 
-# Define an inner function to be passed to the pool
+
 @concurrent(processes=_PROCESSES)
-def preprocess_file(input=_INPUT_PATH, output=_OUTPUT_PATH, file=None, mode='pandas'):
-    generator = preprocessing_generator(input=input, file=file, mode=mode)
+def write_file(ds, output=_OUTPUT_PATH, mode='pandas'):
 
-    for ds in generator:
-        if mode == 'pandas':
-            df, day_counts, site_counts = ds
-            name = ds.__name__
-            filepath = output / pl.Path(name)
-            store = pd.HDFStore(str(filepath), mode='a')
+    if mode == 'pandas':
+        name, df, day_counts, site_counts = ds
+        filepath = output / pl.Path(name)
+        store = pd.HDFStore(str(filepath), mode='a')
 
-            # Write out
-            store.open()
-            df.to_hdf(store, key='dataset', format='table', mode='a')
-            day_counts.to_hdf(store, key='day_counts', format='table', mode='a')
-            site_counts.to_hdf(store, key='site_counts', format='table', mode='a')
-            store.close()
+        # Write out
+        store.open()
+        df.to_hdf(store, key='dataset', format='table', mode='a')
+        day_counts.to_hdf(store, key='day_counts', format='table', mode='a')
+        site_counts.to_hdf(store, key='site_counts', format='table', mode='a')
+        store.close()
 
-            with h5py.File(str(filepath), 'a') as store:
-                start = name.split('_')[-2]
-                end = name.split('_')[-1]
+        with h5py.File(str(filepath), 'a') as store:
+            start = name.split('_')[-2]
+            end = name.split('_')[-1]
 
-                store.attrs['name'] = name
-                store.attrs['datetime_start'] = start
-                store.attrs['datetime_end'] = end
+            store.attrs['name'] = name
+            store.attrs['datetime_start'] = start
+            store.attrs['datetime_end'] = end
 
-        elif mode == 'numpy':
-            index, features, target_flow, target_speed, description = ds  # Unpack
+    elif mode == 'numpy':
+        index, features, target_flow, target_speed, description = ds  # Unpack
 
-            # Write out
-            name = description['name']
-            filepath = output / pl.Path(name)
-            store = pd.HDFStore(str(filepath), mode='a')
+        # Write out
+        name = description['name']
+        filepath = output / pl.Path(name)
+        store = pd.HDFStore(str(filepath), mode='a')
 
-            store.open()
-            index.to_hdf(store, key='index', format='table', mode='a')
-            day_counts = description['day_counts']
-            day_counts.to_hdf(store, key='day_counts', format='table', mode='a')
-            site_counts = description['site_counts']
-            site_counts.to_hdf(store, key='site_counts', format='table', mode='a')
-            store.close()
+        store.open()
+        index.to_hdf(store, key='index', format='table', mode='a')
+        day_counts = description['day_counts']
+        day_counts.to_hdf(store, key='day_counts', format='table', mode='a')
+        site_counts = description['site_counts']
+        site_counts.to_hdf(store, key='site_counts', format='table', mode='a')
+        store.close()
 
-            with h5py.File(str(filepath), 'a') as store:
-                store.create_dataset('features_weather', data=features)
-                store.create_dataset('target_flow', data=target_flow)
-                store.create_dataset('target_speed', data=target_speed)
+        with h5py.File(str(filepath), 'a') as store:
+            store.create_dataset('features_weather', data=features)
+            store.create_dataset('target_flow', data=target_flow)
+            store.create_dataset('target_speed', data=target_speed)
 
-                store['/features_weather'].attrs['columns'] = description['features']
-                store['/target_flow'].attrs['columns'] = description['target_flow']
-                store['/target_speed'].attrs['columns'] = description['target_speed']
+            store['/features_weather'].attrs['columns'] = description['features']
+            store['/target_flow'].attrs['columns'] = description['target_flow']
+            store['/target_speed'].attrs['columns'] = description['target_speed']
 
-                start = name.split('_')[-2]
-                end = name.split('_')[-1]
+            start = name.split('_')[-2]
+            end = name.split('_')[-1]
 
-                store.attrs['name'] = name
-                store.attrs['datetime_start'] = start
-                store.attrs['datetime_end'] = end
+            store.attrs['name'] = name
+            store.attrs['datetime_start'] = start
+            store.attrs['datetime_end'] = end
 
-        else:
-            raise ValueError('Expected "pandas" or "numpy"')
+    else:
+        raise ValueError('Expected "pandas" or "numpy"')
 
 @synchronized
 def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None, mode='pandas'):
@@ -230,9 +229,16 @@ def preprocess(input=_INPUT_PATH, output=_OUTPUT_PATH, files=None, mode='pandas'
     if files is None:
         files = list(input.glob('*.hdf'))
 
+    ds = dict()
     for file in files:
         file = pl.Path(file)
-        preprocess_file(input=input, output=output, file=file, mode=mode)
+        ds[str(file)] = preprocess_file(file, input=input, mode=mode)
+
+    preprocess_file.wait()
+
+    for file in ds.keys():
+        write_file(ds[file], output=output, mode=mode)
+
 
 if __name__ == '__main__':
 
