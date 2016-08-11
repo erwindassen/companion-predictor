@@ -82,7 +82,7 @@ def preprocess_file(file, input=_INPUT_PATH, mode='pandas'):
         # Hash the site column for efficiency in ML down the pipe
         # fdf['site_hash'] = fdf['site'].apply(hash)  # The standard python hash of object... very fast... but not consistent among sessions
         fdf['site_hash'] = fdf['site'].apply(lambda s: mmh3.hash64(s)[-1])  # Murmur hash v3. Should be consistent and fast.
-        site_counts = fdf['site'].value_counts()
+        site_counts = pd.DataFrame(fdf['site'].value_counts())
 
         # # Categorize the sites
         # fdf['site'] = fdf['site'].astype('category')
@@ -97,7 +97,7 @@ def preprocess_file(file, input=_INPUT_PATH, mode='pandas'):
         datetime_index = pd.DatetimeIndex(fdf['datetime_start'])
         fdf['day'] = datetime_index.to_period(freq='d')
         fdf['day'] = fdf['day'].apply(str)
-        day_counts = fdf['day'].value_counts()
+        day_counts = pd.DataFrame(fdf['day'].value_counts())
 
         # Set index to (site, datetime_start) and sort before filling NA
         fdf = fdf.set_index(['site', 'datetime_start']).sort_index()
