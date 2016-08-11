@@ -9,5 +9,6 @@ murmurhash3==2.3.5
 ipython-notebook==4.0.4
 pytables==3.2.2
 
+lasagne==0.1
 # tensorflow==0.8.0
 # tflearn==0.2.0
