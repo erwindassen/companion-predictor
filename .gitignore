@@ -66,3 +66,4 @@ dfs_data
 file_list.txt
 tf_logs
 .idea/
+*.npz
