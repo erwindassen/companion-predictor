@@ -1,4 +1,6 @@
 # companion-predictor
+
+[![Join the chat at https://gitter.im/erwindassen/companion-predictor](https://badges.gitter.im/erwindassen/companion-predictor.svg)](https://gitter.im/erwindassen/companion-predictor?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 A ML based travel time predictor for Companion NDW data  
 
 The predictor reads HDF5 files as exported by the Java code (see the linked repository Companion-Risk-Factors). These files contain
