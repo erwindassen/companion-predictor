@@ -137,6 +137,9 @@ for ifile, fname_in in enumerate(fnames_in):
     # Close
     del df_in
 
+# Reset Index
+df_out.reset_index(inplace=True, drop=True)
+
 # Save
 print "// Saving to %s" % args.fname_out
 with pd.HDFStore("%s" % args.fname_out) as store:
