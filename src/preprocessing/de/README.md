@@ -10,6 +10,7 @@ These scripts take TomTom Traffic Incident XML files [1], historic DWD weather d
 | ingest_weather_stations.py | Ingest DWD historic weather station data into Pandas dataframe (HDF5 wrapped.) |
 | ingest_weather_obs.py | Ingest DWD historic weather station locations into Pandas dataframes (HDF5 wrapped). |
 | match_weather_to_traffic.py | Aligns weather observations with traffic incidents. This is computationally expensive and could probably done more efficiently. It takes about three days to ingest a month of data. |
+| clean_traffic_with_weather.py | Cleans up traffic data by, e.g., throwing away incidents that have the weather station too far away or have missing values. See the file header for details. |
 
 All scripts list call signatures in the header.
 
@@ -20,6 +21,7 @@ The pipeline is a bit complicated. In short, it works as follows:
 3. Weather observations are processed into dataframes (see/use ingest_weather_obs.py)
 4. Traffic data is ingested into dataframes. We do this on a day-by-day basis (iterating over the zipped XMLs) because the data XMLs are incredibly redundant (and therefore huge). See ingest_traffic.sh.
 5. Traffic data is merged with station locations and observations (match_weather_to_traffic.py)
+6. Merged traffic and weather data is cleaned up (clean_traffic_with_weather.py).
 
 This pipeline operates on a few days of data at a time (dictated by the range of the a zipped TomTom traffic advisory collection). For each range, a HDF5-wrapped dataframe is generated. To join a number of these, use cat_pddf.py.
 
