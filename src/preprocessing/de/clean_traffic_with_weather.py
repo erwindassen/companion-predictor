@@ -105,6 +105,21 @@ for ifile, fname_in in enumerate(fnames_in):
     # Info
     print "   %i Rows Post-Cleaning" % len(df_in.index)
 
+    # Classify Unclassified Precipitation
+    idx = (df.precipitation_kind==-999) & (df.precipitation_amount>0.0)
+    df.ix[idx,'precipitation_kind'] = \
+        df[idx].temperature.apply(fill_in_precipitation_kind)
+
+    # Classify Unclassified Non-Precipitation
+    idx = (df.precipitation_kind==-999) & (df.precipitation_amount==0.0)
+    df.ix[idx,'precipitation_kind'] = np.zeros(np.sum(idx))
+
+    # Reclassify Misclassified Precipitation
+    # Data that has 0.0 precipitation but is marked as rain/snow/slush
+    # will be reassigned precipitation_kind 0
+    idx = (df.precipitation_kind>1) & (df.precipitation_amount==0.0)
+    df.ix[idx,'precipitation_kind'] = np.zeros(np.sum(idx))
+
     # Drop Duplicates
     df_in.drop_duplicates(inplace=True, subset=['timestamp', \
                                                 'location_openlr_base64', \
