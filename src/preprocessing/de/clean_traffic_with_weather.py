@@ -10,6 +10,16 @@ In Particular:
 
 This greatly reduces data volume!
 Expect to keep at most a few thousand rows per month.
+
+Call Signature:
+$ python clean_traffic_with_weather.py --fname_out out_clean.pddf.hdf5 < fnames
+
+$ cat fnames
+TrafficWeather_2015_01_02.pddf.hdf5
+TrafficWeather_2015_01_03.pddf.hdf5
+
+To generate the file list, use
+$ ls -1 TrafficWeather_*.pddf.hdf5 > fnames
 """
 
 import pandas as pd
