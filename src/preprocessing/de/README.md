@@ -7,8 +7,8 @@ These scripts take TomTom Traffic Incident XML files [1], historic DWD weather d
 | Script | Description |
 | --- | --- |
 | ingest_traffic.py | Ingest TomTom XML traffic event data into Pandas dataframe (HDF5 wrapped). |
-| ingest_weather_stations.py | Ingest DWD historic weather station data into Pandas dataframe (HDF5 wrapped.) |
-| ingest_weather_obs.py | Ingest DWD historic weather station locations into Pandas dataframes (HDF5 wrapped). |
+| ingest_weather_obs.py | Ingest DWD historic weather station data into Pandas dataframe (HDF5 wrapped.) |
+| ingest_weather_stations.py | Ingest DWD historic weather station locations into Pandas dataframes (HDF5 wrapped). |
 | match_weather_to_traffic.py | Aligns weather observations with traffic incidents. This is computationally expensive and could probably done more efficiently. It takes about three days to ingest a month of data. |
 | clean_traffic_with_weather.py | Cleans up traffic data by, e.g., throwing away incidents that have the weather station too far away or have missing values. See the file header for details. |
 
