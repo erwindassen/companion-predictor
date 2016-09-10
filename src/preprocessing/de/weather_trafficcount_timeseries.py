@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Given a circular area, produce a time series of weather features + incident
-count for each hour. Output file is written to
-<basedir>/reduced_germany_2015_timeseries.pddf.hdf5
+count for each hour.
 
 Basedir for weather+traffic data has the following directory structure:
 reduced_germany_2015_merged
@@ -155,7 +154,7 @@ def fill_in_precipitation_kind(temperature):
     else: return 8
 
 
-def main(basedir, lat, lon, radius):
+def main(basedir, lat, lon, radius, outfile):
 
     df_out = pd.DataFrame(index=DATERANGE)
 
@@ -207,11 +206,10 @@ def main(basedir, lat, lon, radius):
     df_out.ix[idx,'precipitation_kind'] = \
                 df_out[idx].temperature.apply(fill_in_precipitation_kind)
 
-    print df_out.head(30)
-    print df_out.tail(5)
+    #print df_out.head(30)
+    #print df_out.tail(5)
     assert len(df_out.index) == 8760
 
-    outfile = os.path.join(basedir, 'reduced_germany_2015_timeseries.pddf.hdf5')
     print "Writing to %s ..." % outfile
     df_out.to_hdf(outfile, 'df', mode='w')
     print "Done."
@@ -221,8 +219,7 @@ if __name__ == '__main__':
     _help = \
 """
 Given a circular area, produce a time series of weather features + incident
-count for each hour. Output file is written to
-<basedir>/reduced_germany_2015_timeseries.pddf.hdf5
+count for each hour.
 """
 
 
@@ -239,10 +236,17 @@ count for each hour. Output file is written to
     parser.add_argument('--radius',
                         required=True,
                         help="Area radius [km]")
+    parser.add_argument('--outfile',
+                        required=True,
+                        help="Output filename")
     args = parser.parse_args()
 
     try:
-        sys.exit(main(args.basedir, float(args.lat), float(args.lon), int(args.radius)*1e3))
+        sys.exit(main(args.basedir,
+                      float(args.lat),
+                      float(args.lon),
+                      int(args.radius)*1e3,
+                      args.outfile))
     except Exception as ex:
         print("Something went wrong: %s" % ex)
         sys.exit(1)
