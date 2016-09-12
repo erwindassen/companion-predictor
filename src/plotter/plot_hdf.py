@@ -26,6 +26,32 @@ TARGET = [
     'trafficflow',
     'trafficspeed'
 ]
+FEATURES_DF = [
+    'precipitation mm/h',
+    'temperature C',
+    'windspeed m/s'
+]
+TARGET_DF = [
+    'trafficflow counts/h',
+    'trafficspeed km/h'
+]
+
+def plot_site_df(df, fields=TARGET_DF):
+    """Plot pandas DataFrame"""
+ 
+    for i, f in enumerate(fields):
+        # Set up subplot for field f
+        plt.subplot(len(fields), 1, i+1)
+        dates = [dt.datetime.fromtimestamp(ts) for ts in df['timestamp_start']]
+        datenums = md.date2num(dates)
+        plt.xticks(rotation=25)
+        ax = plt.gca()
+        xfmt = md.DateFormatter(DATEFMT)
+        ax.xaxis.set_major_formatter(xfmt)
+        plt.ylabel(f)
+
+        # Plot data
+        plt.plot(datenums, df[f], 'r.-')
 
 
 def plot_site(hdf_filename, site_hash, fields=TARGET):
@@ -55,6 +81,24 @@ def random_site_hash(hdf_filename):
     h5file = h5py.File(hdf_filename, 'r')
     sites = [k for k in h5file.keys() if k.startswith('rws')]
     return random.choice(sites)
+
+
+def plot_df(df):
+    """Plot pandas DataFrame"""
+
+    # Plot target measurements
+    plot_site_df(df, fields=TARGET_DF)
+    plt.suptitle("Site: '%s'" % df['site'][0])
+    plt.subplots_adjust(hspace=0.6)
+
+    # Plot features
+    plt.figure()
+    plot_site_df(df, fields=FEATURES_DF)
+    plt.suptitle("Site: '%s'" % df['site'][0])
+    plt.subplots_adjust(hspace=0.6)
+
+    # Show plots
+    plt.show()
 
 
 def plot_hdf(hdf_filenames, site_hash=None):
