@@ -101,16 +101,16 @@ def area_obs(stfile, obsfile, lat, lon, radius):
     print "Reading stations file %s ..." % stfile
     df_st = pd.read_hdf(stfile, 'df')
 
-    print "%d stations" % df_st.size
+    print "%d stations" % len(df_st.index)
     print "Apply spatial filter ..."
     df_st = df_st[lambda df: haversine((df.latitude, df.longitude), (lat, lon)) < radius]
-    print "%d stations within area" % df_st.size
+    print "%d stations within area" % len(df_st.index)
 
     print "Reading observations file %s ..." % obsfile
     df_obs = pd.read_hdf(obsfile, 'df')
-    print "Observations: %d" % df_obs.size
+    print "Observations: %d" % len(df_obs.index)
     df_obs = pd.merge(df_obs, df_st, how='inner', on=u'station_id')
-    print "Observations within area: %d" % df_obs.size
+    print "Observations within area: %d" % len(df_obs.index)
     print "Group by timestamp and calculate mean ... "
     return df_obs.groupby(['timestamp']).mean()
 
@@ -160,9 +160,9 @@ def main(basedir, lat, lon, radius, outfile):
     df_obs = area_obs(os.path.join(basedir, WEATHER_BASE, PRECIPITATION_ST),
                       os.path.join(basedir, WEATHER_BASE, PRECIPITATION_OBS),
                       lat, lon, radius)
-    df_out[u'precipitation'] = df_obs[u'precipitation']
+    df_out[u'precipitation'] = df_obs[u'precipitation'].astype(float)
     df_out[u'precipitation_amount'] = df_obs[u'precipitation_amount']
-    df_out[u'precipitation_kind'] = df_obs[u'precipitation_kind']
+    df_out[u'precipitation_kind'] = 0
 
     # Filter and aggregate temp
     df_obs = area_obs(os.path.join(basedir, WEATHER_BASE, TEMPERATURE_ST),
@@ -200,7 +200,7 @@ def main(basedir, lat, lon, radius, outfile):
                 pass
 
     print "Classify Unclassified Precipitation"
-    idx = (df_out.precipitation_kind==-999) & (df_out.precipitation_amount>0.0)
+    idx = (df_out.precipitation_amount>0.0)
     df_out.ix[idx,'precipitation_kind'] = \
                 df_out[idx].temperature.apply(fill_in_precipitation_kind)
 

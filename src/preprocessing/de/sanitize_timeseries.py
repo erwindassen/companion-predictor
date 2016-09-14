@@ -15,9 +15,6 @@ import numpy as np
 
 def normalize_series(df, key):
     s = df[key]
-    print(key)
-    print(s.max())
-    print(s.min())
     df[key] = s / (s.max() - s.min())
 
 
@@ -39,10 +36,6 @@ def sanitize(filename, normalize=False, interpolate_limit=3):
         normalize_series(df, 'incidents_slow')
         normalize_series(df, 'incidents_stationary')
         normalize_series(df, 'incidents_total')
-
-
-    # Replace precipitation_kind
-    df.loc[df.precipitation_kind==-999, 'precipitation_kind'] = np.nan
 
     # Interpolate
     df.interpolate(limit=interpolate_limit, inplace=True)
