@@ -159,8 +159,12 @@ if len(dfs) > 0:
     fname = fname[-2] if fname[-1] == '' else fname[-1]
     fpath = "./Traffic_%s.hdf5" % fname
     print("// Saving %i Records to %s" % (len(df.index), fpath))
-    with pd.HDFStore(fpath, 'w') as store:
-        store['df'] = df
+    # There's a bug for very long dataframes when using the fixed format
+    # Cf. https://github.com/PyTables/PyTables/issues/531
+    # Let's use the table format. This more also compatible with vanilla HDF5.
+    # Cf. http://stackoverflow.com/a/20256692
+    # Cf. http://stackoverflow.com/a/30787168
+    df.to_hdf(fpath, 'df', mode='w', format='table')
 
 else:
     print("!! No Records. Not Saving.")
