@@ -57,11 +57,11 @@ def extract_weather_station(fname):
     # Build Dataframe with Stations
     lon = []; lat = []; alt = []; loc = []
     for line_station in lines_stations:
-        station_id = line_station.strip()[2:].split(':')[0]
+        station_id = int(line_station.strip()[2:].split(':')[0])
         line_station_data = line_station.strip()[2:].split(':')[1]
-        lon.append(line_station_data[:14].strip())
-        lat.append(line_station_data[15:27].strip())
-        alt.append(line_station_data[28:38].strip())
+        lon.append(float(line_station_data[:14].strip()))
+        lat.append(float(line_station_data[15:27].strip()))
+        alt.append(float(line_station_data[28:38].strip()))
         loc.append(line_station_data[39:].strip().title())
 
     # Make Dataframe
