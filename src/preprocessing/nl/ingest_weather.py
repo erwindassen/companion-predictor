@@ -55,9 +55,9 @@ def extract_weather_station(fname):
     lines_stations = lines[iline_lo:iline_hi]
 
     # Build Dataframe with Stations
-    lon = []; lat = []; alt = []; loc = []
+    lon = []; lat = []; alt = []; loc = []; station_id = []
     for line_station in lines_stations:
-        station_id = int(line_station.strip()[2:].split(':')[0])
+        station_id.append(int(line_station.strip()[2:].split(':')[0]))
         line_station_data = line_station.strip()[2:].split(':')[1]
         lon.append(float(line_station_data[:14].strip()))
         lat.append(float(line_station_data[15:27].strip()))
