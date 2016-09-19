@@ -65,9 +65,11 @@ def extract_weather_station(fname):
         loc.append(line_station_data[39:].strip().title())
 
     # Make Dataframe
-    df = pd.DataFrame(data={ 'latitude_deg': lat, 'longitude_deg': lon, \
+    df = pd.DataFrame(data={ 'station_id': station_id, \
+                             'latitude_deg': lat, 'longitude_deg': lon, \
                              'altitude_m': alt, 'location': loc}, \
-                      columns=['latitude_deg', 'longitude_deg', \
+                      columns=['station_id', \
+                               'latitude_deg', 'longitude_deg', \
                                'altitude_m', 'location'])
 
     # Return
