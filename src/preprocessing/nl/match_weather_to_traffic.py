@@ -17,6 +17,7 @@ import time
 import pandas as pd
 import numpy as np
 import argparse
+from tqdm import tqdm # Progress bar
 
 
 ###############################################################################
@@ -140,7 +141,7 @@ df_traffic['timestamp_end_seconds'] = \
 indices_weather_observation = []
 print '// Finding Closest Weather Observations'
 tstart = time.time()
-for iix in df_traffic.index:
+for iix in tqdm(df_traffic.index):
     indices_weather_observation.append(\
         find_index_of_closest_weather_observation(\
             df_traffic.ix[iix,'timestamp_end_seconds'], \
