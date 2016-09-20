@@ -105,8 +105,8 @@ df_traffic['station'] = \
 
 # Chopchop
 print "   Found %i Traffic Measurements" % len(df_traffic.index)
-df_traffic = df_traffic.sample(frac=0.01)
-df_traffic.reset_index(drop=True, inplace=True)
+# df_traffic = df_traffic.sample(frac=0.01)
+# df_traffic.reset_index(drop=True, inplace=True)
 # df_traffic = df_traffic.head(5).reset_index(drop=True)
 print "   Processing %i Traffic Measurements" % len(df_traffic.index)
 
