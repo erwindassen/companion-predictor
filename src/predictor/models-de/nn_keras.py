@@ -7,6 +7,8 @@ import argparse
 from keras.models import Sequential
 from keras.layers.core import Dense, Activation
 from keras.engine.training import slice_X
+from keras.utils.visualize_util import plot as k_plt
+from keras.utils.visualize_util import model_to_dot
 
 import numpy as np
 import pandas as pd
@@ -100,22 +102,40 @@ def train_nn(filename, shuffle=True):
     plt.show()
     
 
-def train_nn_multicity(filename_train, filename_test, features=FEATURES):
+def plot_model(model, filename=None):
+    if filename:
+        k_plt(model, to_file=filename, show_shapes=True)
+    #graph = model_to_dot(model)
+    #graph.write_png(filename)
+    
+    # Print sum of weights from input nodes to first layer
+    w1 = model.layers[0].get_weights()[0]
+    #print(w1.shape)
+    for i in range(w1.shape[0]):
+        print("Input node %d: mean=%.4f, std=%.4f" % (i, w1[i,:].mean(), w1[i,:].std()))
+
+    #for layer in model.layers:
+    #    for n in layer.get_weights():
+    #        print(n.shape)
+        #print(layer.get_weights().shape)
+
+
+
+def train_nn_multicity(filename_train, filename_test, nnconf, features=FEATURES, outdir=None):
     # Prepare data
     df_train = sanitize(filename_train, normalize=True, interpolate_limit=None)
     df_test = sanitize(filename_test, normalize=True, interpolate_limit=None)
-    x_train, y_train = prepare(df_train, features=FEATURES)
-    x_test, y_test = prepare(df_test, features=FEATURES)
+    x_train, y_train = prepare(df_train, features=features)
+    x_test, y_test = prepare(df_test, features=features)
     assert x_train.shape[0] == y_train.shape[0]
     n_samples = x_train.shape[0]
     
     # NOTE experimental network configuration
-    model = Sequential([
-        Dense(HIDDEN_SIZE, input_dim=x_train.shape[1], init='uniform', activation='relu'),
-        #Dense(64, activation='linear'),
-        Dense(10, init='uniform', activation='relu'),
-        Dense(y_train.shape[1], init='uniform', activation='linear')
-    ])
+    model = Sequential([Dense(nnconf[0], input_dim=x_train.shape[1], init='uniform', activation='relu')] + \
+            [Dense(n, init='uniform', activation='relu') for n in nnconf[1::]] + \
+                       [Dense(y_train.shape[1], init='uniform', activation='linear')])
+    
+    plot_model(model)
     model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
     model.fit(x_train, y_train, validation_data=(x_test, y_test))
     scores = model.evaluate(x_test, y_test)
@@ -133,38 +153,62 @@ def train_nn_multicity(filename_train, filename_test, features=FEATURES):
     predictions = model.predict(x_test, verbose=0)
     predictions[predictions<0.0] = 0.0
     predictions *= max_incidents*ratio
-    
-    # Visualize
-    df_train_orig[['incidents_total']].plot()
     df_test_orig['predictions'] = predictions.flatten().tolist()
-    df_test_orig[['incidents_total', 'predictions']].plot()
     
+    if not outdir:
+        return
+
     # Store predictions
-    basename = filename_test.split('.')[0]
     if features:
-        outfile = basename + '_w_weather.pddf.hdf5'
+        basename = 'w_weather'
     else:
-        outfile = basename + '_wo_weather.pddf.hdf5'
-    df_test_orig.to_hdf(outfile, 'df', mode='w')
+        basename = 'wo_weather'
+    df_test_orig.to_hdf(os.path.join(outdir, basename + '.pddf.hdf5'), 'df', mode='w')
+
+    # Make plots
+    plot_model(model, os.path.join(outdir, basename + '_model.png'))
+    ax = df_test_orig[['incidents_total', 'predictions']].plot()
+    fig = ax.get_figure()
+    fig.savefig(os.path.join(outdir, basename + '_predictions.png'))
+
+    ax = df_test_orig[['incidents_total', 'predictions']].plot()
+    ax.set_xlim(pd.Timestamp('2015-05-01'), pd.Timestamp('2015-06-01'))
+    fig = ax.get_figure()
+    fig.savefig(os.path.join(outdir, basename + '_predictions_zoom.png'))
 
 
 def main(args):
+    nnconf = [int(i) for i in args.nn.split('-')]
     if len(args.filename) == 1:
         print("Training/testing on single data set")
         train_nn(args.filename[0])
     elif len(args.filename) == 2:
         print("Training/testing using two separate data sets")
-        train_nn_multicity(args.filename[0], args.filename[1]) # With weather
-        train_nn_multicity(args.filename[0], args.filename[1], features=[]) # Without features
-        plt.show()
+        if args.exclude_weather:
+            print("Excluding weather features")
+            train_nn_multicity(args.filename[0], args.filename[1], nnconf, features=[], outdir=args.outdir) # Without features
+        else:
+            train_nn_multicity(args.filename[0], args.filename[1], nnconf,  outdir=args.outdir) # With weather
     else:
         print("bad input")
+        return 1
+    return 0
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('filename',
                         nargs='*',
                         help="DE traffic+weather training data (.pddf.hdf5)")
+    parser.add_argument('--nn',
+                        required=True,
+                        help="Network confguration, e.g. 128-32 for two hidden layers")
+    parser.add_argument('--outdir',
+                        required=False,
+                        help="Directory to save data and plots")
+    parser.add_argument('--exclude-weather',
+                        required=False,
+                        action='store_true',
+                        help="Exclude weather features")
 
     try:
         sys.exit(main(parser.parse_args()))
