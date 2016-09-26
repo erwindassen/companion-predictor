@@ -32,14 +32,18 @@ from collections import namedtuple
 parser = argparse.ArgumentParser()
 parser.add_argument("--date", required=True,
                     help="Date/Directory To Process (YYYY_MM_DD) or (DD_MM_YYYY)")
-parser.add_argument("--type", required=True,
-                    help="Type A is YYYY_MM_DD and type B is DD_MM_YYYY")
 args = parser.parse_args()
 
 # Define record type
 columns = ['node_id', 'timestamp', 'measurement', 'measurement_type']
 Record = namedtuple('Record', columns)
 
+# Define XML namespaces
+
+ns = {'datex': 'http://datex2.eu/schema/2/2_0',
+      'soap': 'http://schemas.xmlsoap.org/soap/envelope/',
+      'xsd': 'http://www.w3.org/2001/XMLSchema',
+      'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
 
 ###############################################################################
 ###############################################################################
@@ -47,62 +51,44 @@ Record = namedtuple('Record', columns)
 ###############################################################################
 ###############################################################################
 
-if args.type == 'A':
+def process(xml):
 
-    def process(xml):
-        site_measurements = xml[0][0][1][4:]  # if xml[0] == 'Header' else xml[1][0][1][4:]
+    site_measurements = xml.iterfind('.//datex:siteMeasurements', ns)
 
-        for site_measurement in site_measurements:
-            node_id = site_measurement[0].attrib.get("id")
+    for site_measurement in site_measurements:
+        node_id = site_measurement[0].attrib.get("id")
 
-            if not node_id.startswith('RWS'):
-                continue
+        if not node_id.startswith('RWS'):
+            continue
 
-            timestamp = datetime.strptime(site_measurement[1].text[:-1], '%Y-%m-%dT%H:%M:%S')
+        timestamp = site_measurement.find('datex:measurementTimeDefault', ns).text
+        time = datetime.strptime(timestamp[:-1], '%Y-%m-%dT%H:%M:%S')
 
-            for subelement in site_measurement:
-                for value in subelement:
+        # We inline the two types of measuremtens to reduce branching
 
-                    measurement = list(value[0][0])
+        vf = site_measurement.iterfind('.//datex:vehicleFlow', ns)
+        for mp in vf:
+            if mp.find('.datex:dataError', ns) is None:  # If is None error is not present
+                measurement = mp.find('.datex:vehicleFlowRate', ns)
+                if measurement is not None:
+                    value = float(measurement.text)
+                    value = np.NaN if value < 0 else value
+                    data.append(Record(node_id, time, value, 'vehicleFlowRate'))
+                else:
+                    print('Malformed node... skipping.')
 
-                    if (len(measurement) != 1):
-                        continue
-                    else:
-                        type = value[0][0].tag[31:]
-                        value = float(measurement[0].text)
-                        value = np.NaN if value < 0 else value
-                        data.append(Record(node_id, timestamp, value, type))
+        ts = site_measurement.iterfind('.//datex:averageVehicleSpeed', ns)
+        for mp in ts:
+            if mp.find('.datex:dataError', ns) is None:  # If is None error is not present
+                measurement = mp.find('.datex:speed', ns)
+                if measurement is not None:
+                    value = float(measurement.text)
+                    value = np.NaN if value < 0 else value
+                    data.append(Record(node_id, time, value, 'averageVehicleSpeed'))
+                else:
+                    print('Malformed node... skipping.')
 
-        return data
-
-elif args.type == 'B':
-
-    def process(xml):
-
-        site_measurements = xml[0][0][1][4:]  # if xml[0] == 'Header' else xml[1][0][1][4:]
-
-        for site_measurement in site_measurements:
-            node_id = site_measurement[0].attrib.get("id")
-
-            if not node_id.startswith('RWS'):
-                continue
-
-            timestamp = datetime.strptime(site_measurement[1].text[:-1], '%Y-%m-%dT%H:%M:%S')
-
-            for subelement in site_measurement:
-                for value in subelement:
-
-                    measurement = list(value[0][-1])
-
-                    if (len(measurement) != 1):
-                        continue
-                    else:
-                        type = value[0][-1].tag[31:]
-                        value = float(measurement[0].text)
-                        value = np.NaN if value < 0 else value
-                        data.append(Record(node_id, timestamp, value, type))
-
-        return data
+    return data
 
 
 ###############################################################################
@@ -112,7 +98,7 @@ elif args.type == 'B':
 ###############################################################################
 
 # Debug
-print("// Processing Data for Date %s" % (args.date))
+print("// Processing Data for date folder %s" % (args.date))
 
 # Build List of Files to Ingest
 globs = glob.iglob("%s/*raffic*.gz" % args.date)  # This gets relevant files of both types
@@ -140,8 +126,10 @@ for gg in globs:
 
     if len(data) > 0:
 
-        df = pd.DataFrame(data=data, columns=columns)
-        df['measurement_type'] = df['measurement_type'].astype('category')
+        df = pd.DataFrame(data=data, columns=columns).dropna()  # We could decide to do something else
+        df = df.groupby(by=['node_id', 'timestamp', 'measurement_type'], as_index=False).mean()
+        df = df.pivot_table(index=['node_id', 'timestamp'], columns=['measurement_type'], values=['measurement'])
+
         dfs.append(df)
 
 # Throw into Dataframe
