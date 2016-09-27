@@ -1,20 +1,6 @@
 """
-Ingest Traffic Data from TomTom.
-
-Make sure to edit the path where you dropped in PyLR. PyLR also needs the
-bitstring module, which is available in several Anaconda channels (bioconda).
-
-XML Parsing:
-http://www.saltycrane.com/blog/2011/07/example-parsing-xml-lxml-objectify/
-
-TMC Event Codes:
-http://wiki.openstreetmap.org/wiki/TMC/Event_Code_List
-
-@todo: Be a bit more clever with TMC event codes (alertCEventCode).
-@todo: Include PyLR and bitstream as submodules.
-@todo: Vectorize: 1/ Only location_openlr_base64 in loop
-                  2/ Use Apply PyLR.serialize + Extracting of Lat/Lon Pairs
-                  3/ Midpoint Computation
+Ingest Traffic Data from NDW.
+Copyright S[&]T
 """
 
 from deco import concurrent, synchronized
