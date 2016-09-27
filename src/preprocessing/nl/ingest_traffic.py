@@ -15,6 +15,7 @@ import gzip
 import xml.etree.cElementTree as et
 from datetime import datetime
 from collections import namedtuple
+from multiprocessing import cpu_count
 import logging
 
 
@@ -35,7 +36,7 @@ ns = {'datex': 'http://datex2.eu/schema/2/2_0',
 ###############################################################################
 ###############################################################################
 
-@concurrent
+@concurrent(processes=cpu_count()-2)
 def process(fpath):
     """
     Process one given NDW .xml.gz file
