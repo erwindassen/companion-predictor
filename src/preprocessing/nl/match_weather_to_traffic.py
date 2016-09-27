@@ -2,6 +2,7 @@
 Matches Weather to Traffic Measurements.
 
 @todo: Document pipeline.
+@todo: If we have stations without a location, throw them away.
 
 Call Signature:
 $ python match_weather_to_traffic.py \
@@ -124,7 +125,7 @@ print "   Found %i Traffic Stations w/ Linked Weather Stations" % \
     len(df_traffic_stations.index)
 
 # Merge Weather Station into Traffic
-df_traffic = df_traffic.merge(df_traffic_stations, on='station', how='left')
+df_traffic = df_traffic.merge(df_traffic_stations, on='station', how='inner')
 del df_traffic['latitude']
 del df_traffic['longitude']
 
