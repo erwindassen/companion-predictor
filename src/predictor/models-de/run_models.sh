@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-BASEDIR="/home/michael/companion-data/nn-munich-50km"
+BASEDIR="/home/michael/companion-data/nn-stuttgart-munich-50km"
 SERIES1="/home/michael/companion-data/reduced_germany_2015_timeseries/stuttgart_50km.pddf.hdf5"
 SERIES2="/home/michael/companion-data/reduced_germany_2015_timeseries/munich_50km.pddf.hdf5"
 
@@ -15,6 +15,13 @@ do
     --nn $nn \
     $SERIES1 \
     $SERIES2 > $d/w_weather.log
+  
+  python nn_keras.py \
+    --outdir $d \
+    --nn $nn \
+    --dropout 0.25 \
+    $SERIES1 \
+    $SERIES2 > $d/w_weather_dropout.log
   
   python nn_keras.py \
     --exclude-weather \

@@ -5,7 +5,7 @@ import os
 import argparse
 
 from keras.models import Sequential
-from keras.layers.core import Dense, Activation
+from keras.layers.core import Dense, Activation, Dropout
 from keras.engine.training import slice_X
 from keras.utils.visualize_util import plot as k_plt
 from keras.utils.visualize_util import model_to_dot
@@ -23,9 +23,6 @@ sys.path.append(os.path.join(sys.path[0],
                              'de'))
 from sanitize_timeseries import sanitize
 
-
-HIDDEN_SIZE = 128
-TEST_FRACTION = 0.1
 
 FEATURES = [
     'precipitation',
@@ -53,54 +50,6 @@ def prepare(df, features=FEATURES):
     y = df[OUTPUT].as_matrix()
     return x, y
 
-def train_nn(filename, shuffle=True):
-    # Prepare data
-    df = sanitize(filename, normalize=True, interpolate_limit=None)
-    x, y = prepare(df)
-    assert x.shape[0] == y.shape[0]
-    n_samples = x.shape[0]
-    
-    # Shuffle data
-    indices = np.arange(n_samples)
-    if shuffle:
-        np.random.shuffle(indices)
-    x = x[indices]
-    y = y[indices]
-    
-    # Split data into train/test
-    split_at = int(n_samples*TEST_FRACTION)
-    (x_train, x_val) = (slice_X(x, 0, split_at), slice_X(x, split_at))
-    (y_train, y_val) = (y[:split_at], y[split_at:])
-    print("X_train shape: %s" % repr(x_train.shape))
-    print("Y_train shape: %s" % repr(y_train.shape))
-    
-    model = Sequential([
-        Dense(HIDDEN_SIZE, input_dim=x.shape[1], init='uniform', activation='relu'),
-        Dense(10, init='uniform', activation='relu'),
-        Dense(y.shape[1], init='uniform', activation='linear')
-    ])
-    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
-    model.fit(x_train, y_train, validation_data=(x_val, y_val))
-    scores = model.evaluate(x_val, y_val)
-    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-    
-    # Predict
-    df_res = pd.DataFrame()
-    predictions = model.predict(x_val, verbose=0)
-    predictions[predictions<0.0] = 0.0
-    
-    # Visualize
-    dates = np.array(df.index.to_pydatetime())[indices][split_at:]
-    datenums = md.date2num(dates) 
-    plt.xticks(rotation=25)
-    ax = plt.gca()
-    DATEFMT = '%d/%m-%Y %H'
-    xfmt = md.DateFormatter(DATEFMT)
-    ax.xaxis.set_major_formatter(xfmt)
-    plt.plot(datenums, predictions.tolist(), 'r.')
-    plt.plot(datenums, y_val.tolist(), 'b.')
-    plt.show()
-    
 
 def plot_model(model, filename=None):
     if filename:
@@ -120,20 +69,33 @@ def plot_model(model, filename=None):
         #print(layer.get_weights().shape)
 
 
-
-def train_nn_multicity(filename_train, filename_test, nnconf, features=FEATURES, outdir=None):
+def train_nn(filename, nnconf, features=FEATURES, dropout=None, outdir=None):
     # Prepare data
-    df_train = sanitize(filename_train, normalize=True, interpolate_limit=None)
-    df_test = sanitize(filename_test, normalize=True, interpolate_limit=None)
-    x_train, y_train = prepare(df_train, features=features)
-    x_test, y_test = prepare(df_test, features=features)
+    print("Reading data from %s ..." % filename)
+    df = sanitize(filename, normalize=True, interpolate_limit=None)
+    _x, _y = prepare(df, features=features)
+    n_samples = _x.shape[0]
+    print("Samples: %d" % n_samples)
+
+    # Split data (same split as Volker used for other models)
+    x_train = np.concatenate((_x[0:3534], _x[3705::]))
+    y_train = np.concatenate((_y[0:3534], _y[3705::]))
+    x_test = _x[3534:3705]
+    y_test = _y[3534:3705]
+
     assert x_train.shape[0] == y_train.shape[0]
-    n_samples = x_train.shape[0]
+    print("Samples: %d" % n_samples)
     
-    # NOTE experimental network configuration
-    model = Sequential([Dense(nnconf[0], input_dim=x_train.shape[1], init='uniform', activation='relu')] + \
-            [Dense(n, init='uniform', activation='relu') for n in nnconf[1::]] + \
-                       [Dense(y_train.shape[1], init='uniform', activation='linear')])
+    # Build network
+    layers = [
+        Dense(nnconf[0], input_dim=x_train.shape[1], init='uniform', activation='relu'),
+    ]
+    if dropout:
+        print("Add dropout layer, p=%.3f" % dropout)
+        layers += [Dropout(dropout)]
+    layers += [Dense(n, init='uniform', activation='relu') for n in nnconf[1::]]
+    layers += [Dense(y_train.shape[1], init='uniform', activation='linear')]
+    model = Sequential(layers)
     
     plot_model(model)
     model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
@@ -142,12 +104,80 @@ def train_nn_multicity(filename_train, filename_test, nnconf, features=FEATURES,
     print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
     
     # Get the original max of incident counts
-    df_train_orig = sanitize(filename_train, normalize=False, interpolate_limit=None)
+    #df_train_orig = sanitize(filename_train, normalize=False, interpolate_limit=None)
+    df_test_orig = sanitize(filename, normalize=False, interpolate_limit=None)
+    max_incidents = df_test_orig['incidents_total'].max()
+    ratio = 1.0
+    #ratio = df_test_orig['incidents_total'].mean() / df_train_orig['incidents_total'].mean()
+    #print("Max incidents_total: %d" % max_incidents)
+    #print("Ratio: %.5f" % ratio)
+    
+    # Predict
+    _predictions = model.predict(x_test, verbose=0)
+    _predictions[_predictions<0.0] = 0.0
+    predictions = np.array([_predictions[i-3534] if 3534 <= i < 3705 else np.nan for i in range(n_samples)])
+    #predictions *= max_incidents*ratio
+    df_test_orig['predictions'] = predictions.flatten().tolist()
+    
+    if not outdir:
+        return
+
+    # Store predictions
+    if features:
+        basename = 'w_weather'
+    else:
+        basename = 'wo_weather'
+    if dropout is not None:
+        basename += '_dropout'
+    df_test_orig.to_hdf(os.path.join(outdir, basename + '.pddf.hdf5'), 'df', mode='w')
+
+
+def train_nn_multicity(filenames_train, filename_test, nnconf,
+                       features=FEATURES, dropout=None, outdir=None):
+    # Prepare data
+    _first= filenames_train[0]
+    print("Reading %s ..." % _first)
+    df_train = sanitize(_first, normalize=True, interpolate_limit=None)
+    x_train, y_train = prepare(df_train, features=features)
+    for fname in filenames_train[1::]:
+        print("Reading %s ..." % fname)
+        df_train = sanitize(fname, normalize=True, interpolate_limit=None)
+        _x, _y = prepare(df_train, features=features)
+        x_train = np.concatenate((x_train, _x))
+        y_train = np.concatenate((y_train, _y))
+
+    print("Reading test data %s ..." % filename_test)
+    df_test = sanitize(filename_test, normalize=True, interpolate_limit=None)
+    x_test, y_test = prepare(df_test, features=features)
+    assert x_train.shape[0] == y_train.shape[0]
+    n_samples = x_train.shape[0]
+    print("Samples: %d" % n_samples)
+    
+    # Build network
+    layers = [
+        Dense(nnconf[0], input_dim=x_train.shape[1], init='uniform', activation='relu'),
+    ]
+    if dropout:
+        print("Add dropout layer, p=%.3f" % dropout)
+        layers += [Dropout(dropout)]
+    layers += [Dense(n, init='uniform', activation='relu') for n in nnconf[1::]]
+    layers += [Dense(y_train.shape[1], init='uniform', activation='linear')]
+    model = Sequential(layers)
+    
+    plot_model(model)
+    model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
+    model.fit(x_train, y_train, validation_data=(x_test, y_test))
+    scores = model.evaluate(x_test, y_test)
+    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+    
+    # Get the original max of incident counts
+    #df_train_orig = sanitize(filename_train, normalize=False, interpolate_limit=None)
     df_test_orig = sanitize(filename_test, normalize=False, interpolate_limit=None)
     max_incidents = df_test_orig['incidents_total'].max()
-    ratio = df_test_orig['incidents_total'].mean() / df_train_orig['incidents_total'].mean()
-    print("Max incidents_total: %d" % max_incidents)
-    print("Ratio: %.5f" % ratio)
+    ratio = 1.0
+    #ratio = df_test_orig['incidents_total'].mean() / df_train_orig['incidents_total'].mean()
+    #print("Max incidents_total: %d" % max_incidents)
+    #print("Ratio: %.5f" % ratio)
     
     # Predict
     predictions = model.predict(x_test, verbose=0)
@@ -163,6 +193,8 @@ def train_nn_multicity(filename_train, filename_test, nnconf, features=FEATURES,
         basename = 'w_weather'
     else:
         basename = 'wo_weather'
+    if dropout is not None:
+        basename += '_dropout'
     df_test_orig.to_hdf(os.path.join(outdir, basename + '.pddf.hdf5'), 'df', mode='w')
 
     # Make plots
@@ -181,18 +213,28 @@ def main(args):
     nnconf = [int(i) for i in args.nn.split('-')]
     if len(args.filename) == 1:
         print("Training/testing on single data set")
-        train_nn(args.filename[0])
-    elif len(args.filename) == 2:
-        print("Training/testing using two separate data sets")
         if args.exclude_weather:
             print("Excluding weather features")
-            train_nn_multicity(args.filename[0], args.filename[1], nnconf, features=[], outdir=args.outdir) # Without features
+            train_nn(args.filename[0], nnconf,
+                     features=[], dropout=args.dropout,
+                     outdir=args.outdir) # Without features
         else:
-            train_nn_multicity(args.filename[0], args.filename[1], nnconf,  outdir=args.outdir) # With weather
+            train_nn(args.filename[0], nnconf,
+                     dropout=args.dropout,
+                     outdir=args.outdir) # With weather
     else:
-        print("bad input")
-        return 1
+        print("Training/testing using several data sets")
+        if args.exclude_weather:
+            print("Excluding weather features")
+            train_nn_multicity(args.filename[0:-1], args.filename[-1], nnconf,
+                               features=[], dropout=args.dropout,
+                               outdir=args.outdir) # Without features
+        else:
+            train_nn_multicity(args.filename[0:-1], args.filename[-1], nnconf,
+                               dropout=args.dropout,
+                               outdir=args.outdir) # With weather
     return 0
+
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
@@ -201,7 +243,7 @@ if __name__ == '__main__':
                         help="DE traffic+weather training data (.pddf.hdf5)")
     parser.add_argument('--nn',
                         required=True,
-                        help="Network confguration, e.g. 128-32 for two hidden layers")
+                        help="Network confguration, e.g. 128-32 for two hidden layers with 128 and 32 nodes respectively")
     parser.add_argument('--outdir',
                         required=False,
                         help="Directory to save data and plots")
@@ -209,6 +251,12 @@ if __name__ == '__main__':
                         required=False,
                         action='store_true',
                         help="Exclude weather features")
+    parser.add_argument('--dropout',
+                        required=False,
+                        type=float,
+                        help="Factor for dropout layer. If ommitted, no dropout layer is added.")
+    main(parser.parse_args())
+    sys.exit(0)
 
     try:
         sys.exit(main(parser.parse_args()))
