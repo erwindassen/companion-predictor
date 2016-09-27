@@ -17,6 +17,8 @@ http://wiki.openstreetmap.org/wiki/TMC/Event_Code_List
                   3/ Midpoint Computation
 """
 
+from __future__ import print_function
+
 import glob
 import gzip
 import xml.etree.cElementTree as et
