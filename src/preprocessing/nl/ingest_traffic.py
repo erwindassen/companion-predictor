@@ -17,22 +17,20 @@ http://wiki.openstreetmap.org/wiki/TMC/Event_Code_List
                   3/ Midpoint Computation
 """
 
-import glob
+from deco import concurrent, synchronized
+
+import begin
+
+import pandas as pd
+import numpy as np
+
+import pathlib2 as pl
 import gzip
 import xml.etree.cElementTree as et
-import pandas as pd
-
-import numpy as np
-import argparse
 from datetime import datetime
 from collections import namedtuple
+import logging
 
-
-# Parse Arguments
-parser = argparse.ArgumentParser()
-parser.add_argument("--date", required=True,
-                    help="Date/Directory To Process (YYYY_MM_DD) or (DD_MM_YYYY)")
-args = parser.parse_args()
 
 # Define record type
 columns = ['node_id', 'timestamp', 'measurement', 'measurement_type']
@@ -51,44 +49,70 @@ ns = {'datex': 'http://datex2.eu/schema/2/2_0',
 ###############################################################################
 ###############################################################################
 
-def process(xml):
+@concurrent
+def process(fpath):
+    """
+    Process one given NDW .xml.gz file
+    :param fpath: pathlib.Path specifying input file
+    :return: list of Record objects with parsed data
+    """
 
-    site_measurements = xml.iterfind('.//datex:siteMeasurements', ns)
+    logging.info("// Processing %s" % str(fpath))
+    data = list()
 
-    for site_measurement in site_measurements:
-        node_id = site_measurement[0].attrib.get("id")
+    # Load XML
+    with gzip.open(str(fpath), 'r') as fxml:
 
-        if not node_id.startswith('RWS'):
-            continue
+        # Some XML files are corrupted, skip them silently
+        try:
+            xml = et.parse(fxml).getroot()
+        except:
+            xml = None
 
-        timestamp = site_measurement.find('datex:measurementTimeDefault', ns).text
-        time = datetime.strptime(timestamp[:-1], '%Y-%m-%dT%H:%M:%S')
+        if xml is None:
+            return data
 
-        # We inline the two types of measuremtens to reduce branching
+        site_measurements = xml.iterfind('.//datex:siteMeasurements', ns)
 
-        vf = site_measurement.iterfind('.//datex:vehicleFlow', ns)
-        for mp in vf:
-            if mp.find('.datex:dataError', ns) is None:  # If is None error is not present
-                measurement = mp.find('.datex:vehicleFlowRate', ns)
-                if measurement is not None:
-                    value = float(measurement.text)
-                    value = np.NaN if value < 0 else value
-                    data.append(Record(node_id, time, value, 'vehicleFlowRate'))
-                else:
-                    print('Malformed node... skipping.')
+        for site_measurement in site_measurements:
+            node_id = site_measurement[0].attrib.get("id")
 
-        ts = site_measurement.iterfind('.//datex:averageVehicleSpeed', ns)
-        for mp in ts:
-            if mp.find('.datex:dataError', ns) is None:  # If is None error is not present
-                measurement = mp.find('.datex:speed', ns)
-                if measurement is not None:
-                    value = float(measurement.text)
-                    value = np.NaN if value < 0 else value
-                    data.append(Record(node_id, time, value, 'averageVehicleSpeed'))
-                else:
-                    print('Malformed node... skipping.')
+            if not node_id.startswith('RWS'):
+                continue
 
-    return data
+            timestamp = site_measurement.find('datex:measurementTimeDefault', ns).text
+            time = datetime.strptime(timestamp[:-1], '%Y-%m-%dT%H:%M:%S')
+
+            # We inline the two types of measuremtens to reduce branching
+
+            vf = site_measurement.iterfind('.//datex:vehicleFlow', ns)
+            for mp in vf:
+                if mp.find('.datex:dataError', ns) is None:  # If is None error is not present
+                    measurement = mp.find('.datex:vehicleFlowRate', ns)
+                    if measurement is not None:
+                        value = float(measurement.text)
+                        value = np.NaN if value < 0 else value
+                        data.append(Record(node_id, time, value, 'vehicleFlowRate'))
+                    else:
+                        logging.warning('Malformed node in {}... skipping.'.format(str(fpath)))
+
+            ts = site_measurement.iterfind('.//datex:averageVehicleSpeed', ns)
+            for mp in ts:
+                if mp.find('.datex:dataError', ns) is None:  # If is None error is not present
+                    measurement = mp.find('.datex:speed', ns)
+                    if measurement is not None:
+                        value = float(measurement.text)
+                        value = np.NaN if value < 0 else value
+                        data.append(Record(node_id, time, value, 'averageVehicleSpeed'))
+                    else:
+                        logging.warning('Malformed node in {}... skipping.'.format(str(fpath)))
+
+    if len(data) > 0:
+        df = pd.DataFrame(data=data, columns=columns).dropna()  # We could decide to do something else
+        df = df.groupby(by=['timestamp', 'node_id', 'measurement_type'], as_index=False).mean()
+        df = df.pivot_table(index=['timestamp', 'node_id'], columns=['measurement_type'], values=['measurement'])
+
+    return df
 
 
 ###############################################################################
@@ -97,58 +121,57 @@ def process(xml):
 ###############################################################################
 ###############################################################################
 
-# Debug
-print("// Processing Data for date folder %s" % (args.date))
+@begin.start
+@begin.logging
+@begin.convert(_automatic=True)
+def run(input:  'Input dir to look recursively for NDW traffic xml.gz files' = '.',
+        output: 'Output dir to write dataframes to' = '.'):
+    """
+    Processes NDW xml files extrating traffic speed and flow.
+    """
 
-# Build List of Files to Ingest
-globs = glob.iglob("%s/*raffic*.gz" % args.date)  # This gets relevant files of both types
+    # "Date/Directory To Process (YYYY_MM_DD) or (DD_MM_YYYY)")
 
-dfs = list()
-# Loop XML Files
-for gg in globs:
-    # print "// Processing %s" % gg
+    # Debug
+    logging.info("// Processing Data for date folder {}".format(str(input)))
 
-    data = []
+    # Build List of Files to Ingest
+    input = pl.Path(input)
+    output = pl.Path(output)
 
-    # Load XML
-    with gzip.open(gg, 'r') as fxml:
+    if not (input.exists() and input.is_dir() and output.exists() and output.is_dir()):
+        raise IOError('Invalid input/output directories passed.')
 
-        # Some XML files are corrupted, skip them silently
-        try:
-            xml = et.parse(fxml).getroot()
-        except:
-            xml = None
+    globs = list(input.rglob('*raffic*.gz'))  # This gets relevant files of both types
 
-        if xml is not None:
-            data = process(xml)
+    @synchronized
+    def orchestrate(globs, progress=True):
+        dfs = dict()
 
-    print('.', end='')
+        # Loop XML Files
+        for fpath in globs:
+            dfs[fpath.name] = process(fpath)
 
-    if len(data) > 0:
+        return dfs
 
-        df = pd.DataFrame(data=data, columns=columns).dropna()  # We could decide to do something else
-        df = df.groupby(by=['node_id', 'timestamp', 'measurement_type'], as_index=False).mean()
-        df = df.pivot_table(index=['node_id', 'timestamp'], columns=['measurement_type'], values=['measurement'])
+    # Call the orchestrator
+    dfs = orchestrate(globs)
 
-        dfs.append(df)
+    # Throw into Dataframe
+    if len(dfs) > 0:
 
-# Throw into Dataframe
-if len(dfs) > 0:
+        df = pd.concat(dfs.values(), axis=0)
 
-    df = pd.concat(dfs, axis=0)
+        # Drop Duplicates
+        df.drop_duplicates(inplace=True)
 
-    print('')  # Add a new line
-    # Drop Duplicates
-    print("// Dropping Duplicates")
-    df.drop_duplicates(inplace=True)
+        # Pandas cannot write multiindex columns to hdf yet. We have to drop it.
+        df.columns = ['averageVehicleSpeed', 'vehicleFlowRate']
 
-    # Store Dataframe
-    fname = args.date.split('/')
-    fname = fname[-2] if fname[-1] == '' else fname[-1]
-    fpath = "./Traffic_%s.hdf5" % fname
-    print("// Saving %i Records to %s" % (len(df.index), fpath))
-    with pd.HDFStore(fpath, 'w') as store:
-        store['df'] = df
+        # Store Dataframe
+        fname = str(output / pl.Path('Traffic-{}.hdf5'.format(datetime.now().strftime('%y-%m-%d-%H-%M-%s'))))
+        logging.info("// Saving %i Records to %s" % (len(df), fname))
+        df.to_hdf(fname, key='df', mode='w', format='table')
 
-else:
-    print("!! No Records. Not Saving.")
+    else:
+        logging.info("!! No Records. Not Saving.")
