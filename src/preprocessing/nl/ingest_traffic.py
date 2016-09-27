@@ -155,6 +155,9 @@ def run(input:  'Input dir to look recursively for NDW traffic xml.gz files' = '
         # Pandas cannot write multiindex columns to hdf yet. We have to drop it.
         df.columns = ['averageVehicleSpeed', 'vehicleFlowRate']
 
+    	# Recast indices to collumns (also needed for dask)
+    	df.reset_index(inplace=True)
+
         # Store Dataframe
         fname = str(output / pl.Path('Traffic-{}.hdf5'.format(datetime.now().strftime('%y-%m-%d-%H-%M-%s'))))
         logging.info("// Saving %i Records to %s" % (len(df), fname))
