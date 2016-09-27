@@ -28,6 +28,7 @@ import numpy as np
 import argparse
 from datetime import datetime
 from collections import namedtuple
+from tqdm import tqdm
 
 
 # Parse Arguments
@@ -103,11 +104,11 @@ def process(xml):
 print("// Processing Data for date folder %s" % (args.date))
 
 # Build List of Files to Ingest
-globs = glob.iglob("%s/*raffic*.gz" % args.date)  # This gets relevant files of both types
+globs = glob.glob("%s/*raffic*.gz" % args.date)  # This gets relevant files of both types
 
 dfs = list()
 # Loop XML Files
-for gg in globs:
+for gg in tqdm(globs):
     # print "// Processing %s" % gg
 
     data = []
@@ -124,7 +125,7 @@ for gg in globs:
         if xml is not None:
             data = process(xml)
 
-    print('.', end='')
+    # print('.', end='')
 
     if len(data) > 0:
 
