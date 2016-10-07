@@ -67,3 +67,4 @@ file_list.txt
 tf_logs
 .idea/
 *.npz
+debug
