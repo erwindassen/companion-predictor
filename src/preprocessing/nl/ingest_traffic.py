@@ -19,6 +19,7 @@ from collections import namedtuple
 from multiprocessing import cpu_count
 import logging
 
+from tables.exceptions import HDF5ExtError
 
 DFS_PER_FILE = 5000
 
@@ -174,9 +175,12 @@ def run(input:  'Input dir to look recursively for NDW traffic xml.gz files' = '
             fname = output / pl.Path('Traffic-{}.hdf5'.format(datetime.now().strftime('%y-%m-%d-%H-%M-%S-%f')))
             logging.info("// Saving %i Records to %s" % (len(df), fname))
 
-            with pd.HDFStore(str(fname), mode='w', format='table') as store:
-                store.put('df', df, format='table')
-                store.put('range', pd.Series([df.timestamp.min(), df.timestamp.max()]), format='table')
+            try:
+                with pd.HDFStore(str(fname), mode='w', format='table') as store:
+                    store.put('range', pd.Series([df.timestamp.min(), df.timestamp.max()]), format='table')
+                    store.put('df', df, format='table')
+            except HDF5ExtError:
+                logging.warning("HDF Exception caught. Probably harmless but check file size.")
 
             logging.info("// Done")
 
