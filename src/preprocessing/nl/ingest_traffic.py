@@ -21,7 +21,7 @@ import logging
 
 from tables.exceptions import HDF5ExtError
 
-DFS_PER_FILE = 5000
+DFS_PER_FILE = 6000
 
 # Define record type
 columns = ['node_id', 'timestamp', 'measurement', 'measurement_type']
@@ -50,6 +50,7 @@ def process(fpath):
 
     logging.info("// Processing %s" % str(fpath))
     data = list()
+    df = pd.DataFrame()  # We need to return a DataFrame object even if empty
 
     # Load XML
     with gzip.open(str(fpath), 'r') as fxml:
@@ -58,10 +59,8 @@ def process(fpath):
         try:
             xml = et.parse(fxml).getroot()
         except:
-            xml = None
-
-        if xml is None:
-            return data
+            logging.warning('!! Malformed XML file in {}... skipping.'.format(str(fpath)))
+            return df
 
         site_measurements = xml.iterfind('.//datex:siteMeasurements', ns)
 
@@ -85,7 +84,7 @@ def process(fpath):
                         value = np.NaN if value < 0 else value
                         data.append(Record(node_id, time, value, 'vehicleFlowRate'))
                     else:
-                        logging.warning('Malformed node in {}... skipping.'.format(str(fpath)))
+                        logging.warning('!! Malformed node in {}... skipping.'.format(str(fpath)))
 
             ts = site_measurement.iterfind('.//datex:averageVehicleSpeed', ns)
             for mp in ts:
@@ -96,7 +95,7 @@ def process(fpath):
                         value = np.NaN if value < 0 else value
                         data.append(Record(node_id, time, value, 'averageVehicleSpeed'))
                     else:
-                        logging.warning('Malformed node in {}... skipping.'.format(str(fpath)))
+                        logging.warning('!! Malformed node in {}... skipping.'.format(str(fpath)))
 
     if len(data) > 0:
         df = pd.DataFrame(data=data, columns=columns).dropna()  # We could decide to do something else
@@ -109,9 +108,6 @@ def process(fpath):
 
         # Recast indices to collumns (also needed for dask)
         df.reset_index(inplace=True)
-
-    else:
-        df = pd.DataFrame()  # We need to return a DataFrame object even if empty
 
     return df
 
@@ -141,7 +137,7 @@ def run(input:  'Input dir to look recursively for NDW traffic xml.gz files' = '
     output = pl.Path(output)
 
     if not (input.exists() and input.is_dir() and output.exists() and output.is_dir()):
-        raise IOError('Invalid input/output directories passed.')
+        raise IOError('!! Invalid input/output directories passed.')
 
     globs = list(input.rglob('*raffic*.gz'))  # This gets relevant files of both types
 
@@ -165,6 +161,10 @@ def run(input:  'Input dir to look recursively for NDW traffic xml.gz files' = '
         for sdfs in chunked_iter(dfs.values(), DFS_PER_FILE):
             df = pd.concat(sdfs, axis=0)
 
+            if len(df) == 0:
+                logging.warning("!! Writing would result in empty file... skipping this batch.")
+                continue
+
             # Drop Duplicates
             df.drop_duplicates(inplace=True)
 
@@ -180,9 +180,11 @@ def run(input:  'Input dir to look recursively for NDW traffic xml.gz files' = '
                     store.put('range', pd.Series([df.timestamp.min(), df.timestamp.max()]), format='table')
                     store.put('df', df, format='table')
             except HDF5ExtError:
-                logging.warning("HDF Exception caught. Probably harmless but check file size.")
+                logging.warning("!! HDF Exception caught. Probably harmless but check file size.")
 
-            logging.info("// Done")
 
     else:
         logging.info("!! No Records. Not Saving.")
+
+
+logging.info("// Done!")
